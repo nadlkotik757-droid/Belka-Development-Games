@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scrollable Tiles Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Minecraft-style font -->
+  <style>
+    @font-face {
+      font-family: "Minecraftia";
+      src: url("Minecraftia.woff2") format("woff2");
+      font-display: swap;
+    }
+    :root {
+      --bg-grad: linear-gradient(135deg, #835d5d, #b1815c);
+      --tile-bg: #1a1414cc;
+      --tile-border: #2d2222;
+      --tile-shadow: rgba(0, 0, 0, 0.3);
+      --text-color: #f4e9dc;
+      --muted-color: #c8b3a2;
+      --accent: #e0c4a2;
+      --scroll-bg: #3a2b2b;
+      --scroll-thumb: #b1815c;
+      --scroll-thumb-hover: #c29167;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg-grad);
+      color: var(--text-color);
+      font-family: "Minecraftia", monospace;
+    }
+
+    /* Custom page cursor (optional) */
+    body {
+      cursor: url("cursor.png") 12 12, auto; /* adjust hotspot if needed */
+    }
+
+    /* Container: chat-like vertical scroll */
+    .chat-container {
+      box-sizing: border-box;
+      height: 100vh;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;               /* Firefox */
+      scrollbar-color: var(--scroll-thumb) var(--scroll-bg); /* Firefox */
+    }
+
+    /* Custom scrollbar: WebKit */
+    .chat-container::-webkit-scrollbar {
+      width: 12px;
+    }
+    .chat-container::-webkit-scrollbar-track {
+      background: var(--scroll-bg);
+      border-radius: 8px;
+    }
+    .chat-container::-webkit-scrollbar-thumb {
+      background: var(--scroll-thumb);
+      border-radius: 8px;
+      border: 2px solid var(--scroll-bg);
+    }
+    .chat-container::-webkit-scrollbar-thumb:hover {
+      background: var(--scroll-thumb-hover);
+    }
+
+    /* Tiles layout */
+    .tiles {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .tile {
+      background: var(--tile-bg);
+      border: 2px solid var(--tile-border);
+      border-radius: 10px;
+      box-shadow: 0 6px 14px var(--tile-shadow);
+      overflow: hidden;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    .tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
+    }
+
+    .tile-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 2px solid var(--tile-border);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tile-index {
+      color: var(--accent);
+      letter-spacing: 0.02em;
+      font-size: 14px;
+    }
+
+    .thumb-wrap {
+      width: 100%;
+      background: linear-gradient(180deg, #2b2220, #4a3a34);
+    }
+    .thumb {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9; /* Keeps consistent tile image height */
+      object-fit: cover;
+      image-rendering: pixelated; /* preserves retro look if low-res */
+    }
+
+    .tile-body {
+      padding: 12px 14px 16px;
+    }
+
+    .tile-text {
+      font-size: 14px;
+      line-height: 1.35;
+      color: var(--muted-color);
+      text-shadow: 0 1px 0 rgba(0,0,0,0.35);
+    }
+
+    /* Up/down cursor indicator area (optional) */
+    .scroll-cues {
+      position: fixed;
+      right: 12px;
+      bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 100;
+      pointer-events: none; /* purely decorative; remove to make clickable */
+    }
+
+    .cue {
+      pointer-events: auto; /* make clickable if desired */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 2px solid var(--tile-border);
+      box-shadow: 0 4px 8px var(--tile-shadow);
+      backdrop-filter: blur(2px);
+      cursor: url("cursor.png") 12 12, pointer;
+      transition: transform 120ms ease, background 120ms ease;
+    }
+    .cue:hover {
+      transform: translateY(-2px);
+      background: rgba(0, 0, 0, 0.35);
+    }
+
+    .cue svg {
+      width: 18px;
+      height: 18px;
+      fill: var(--accent);
+      filter: drop-shadow(0 1px 0 rgba(0,0,0,0.5));
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 640px) {
+      .chat-container {
+        padding: 16px 10px;
+      }
+      .tile-text {
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="chat-container" id="chat">
+  <div class="tiles" id="tiles"></div>
+</div>
+
+<!-- Optional scroll cues (click-to-scroll) -->
+<div class="scroll-cues">
+  <button class="cue" id="scrollUp" title="Scroll up" aria-label="Scroll up">
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path d="M12 5l-7 7h14z"></path>
+    </svg>
+  </button>
+  <button class="cue" id="scrollDown" title="Scroll down" aria-label="Scroll down">
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path d="M5 10l7 7 7-7z"></path>
+    </svg>
+  </button>
+</div>
+
+<script>
+  // Minimal inline placeholder image (SVG) as data URL
+  const placeholderDataUrl =
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#5a3f3f"/>
+              <stop offset="100%" stop-color="#8a5f43"/>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="1280" height="720" fill="url(#g)"/>
+          <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
+                font-family="monospace" font-size="64" fill="#f4e9dc">Placeholder</text>
+        </svg>
+      `);
+
+  function createTile(index) {
+    const tile = document.createElement('article');
+    tile.className = 'tile';
+
+    // Header (optional index label for subtle chat feel)
+    const header = document.createElement('div');
+    header.className = 'tile-header';
+    const idx = document.createElement('div');
+    idx.className = 'tile-index';
+    idx.textContent = `Tile #${index + 1}`;
+    header.appendChild(idx);
+
+    // Image area
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'thumb-wrap';
+    const img = document.createElement('img');
+    img.className = 'thumb';
+    img.alt = `Tile image ${index + 1}`;
+    img.src = placeholderDataUrl; // Replace with your real image path if needed
+    thumbWrap.appendChild(img);
+
+    // Body text
+    const body = document.createElement('div');
+    body.className = 'tile-body';
+
+    const text = document.createElement('div');
+    text.className = 'tile-text';
+    text.textContent = 'Not implemented'; // English text as requested
+
+    body.appendChild(text);
+
+    tile.appendChild(header);
+    tile.appendChild(thumbWrap);
+    tile.appendChild(body);
+
+    return tile;
+  }
+
+  // Generate 50 tiles
+  const tilesRoot = document.getElementById('tiles');
+  for (let i = 0; i < 50; i++) {
+    tilesRoot.appendChild(createTile(i));
+  }
+
+  // Optional: buttons to scroll up/down
+  const chat = document.getElementById('chat');
+  const scrollStep = 240; // pixels per click; adjust to taste
+
+  document.getElementById('scrollUp').addEventListener('click', () => {
+    chat.scrollBy({ top: -scrollStep, left: 0, behavior: 'smooth' });
+  });
+  document.getElementById('scrollDown').addEventListener('click', () => {
+    chat.scrollBy({ top: scrollStep, left: 0, behavior: 'smooth' });
+  });
+
+  // Keyboard support: arrow up/down
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp') chat.scrollBy({ top: -scrollStep, behavior: 'smooth' });
+    if (e.key === 'ArrowDown') chat.scrollBy({ top: scrollStep, behavior: 'smooth' });
+  });
+</script>
+</body>
+</html>
